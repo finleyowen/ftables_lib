@@ -129,6 +129,11 @@ impl Token {
 fn setup_lexer() -> Lexer<Token> {
     let mut lexer: Lexer<Token> = Lexer::new();
 
+    // comments
+    lexer.add_rule(r"//.*\n", |_| LexResult::Ignore);
+    lexer.add_rule(r"/\*[^(\*/)]+\*/", |_| LexResult::Ignore);
+
+    // whitespace
     lexer.add_rule(r"[\s\n\t]+", |_| LexResult::Ignore);
 
     // chars
@@ -755,6 +760,16 @@ mod tests {
         } else {
             return Err("Didn't correctly parse Table2 definition!".into());
         }
+
+        let tq = lex(include_str!(
+            "../test_artifacts/valid_schemas/valid_schema_1.txt"
+        ))?;
+        let (_prgm, _) = parse_prgm(&tq)?;
+
+        let tq = lex(include_str!(
+            "../test_artifacts/valid_schemas/valid_schema_1.txt"
+        ))?;
+        let (_prgm, _) = parse_prgm(&tq)?;
 
         Ok(())
     }
