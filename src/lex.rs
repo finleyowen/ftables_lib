@@ -1,74 +1,7 @@
+use std::cmp::min;
+
+use super::core::Literal;
 use rlrl::lex::*;
-use std::fmt;
-
-/// Enum representing a literal token in the DDL
-#[derive(PartialEq, Debug, Clone)]
-pub enum Literal {
-    Int(i32),
-    Dbl(f64),
-    Str(String),
-}
-
-impl Literal {
-    pub fn is_str_literal(&self) -> bool {
-        match self {
-            Self::Str(_) => true,
-            _ => false,
-        }
-    }
-
-    /// Clones the string value if `self` is a `Literal::Str`, otherwise
-    /// returns `None`.
-    pub fn get_str(&self) -> Option<&String> {
-        match self {
-            Self::Str(val) => Some(val),
-            _ => None,
-        }
-    }
-
-    pub fn is_int_literal(&self) -> bool {
-        match self {
-            Self::Int(_) => true,
-            _ => false,
-        }
-    }
-
-    /// Clones the int value if `self` is a `Literal::Int`, otherwise returns
-    /// `None`.
-    pub fn get_int(&self) -> Option<i32> {
-        match self {
-            Self::Int(val) => Some(val.clone()),
-            _ => None,
-        }
-    }
-
-    pub fn is_dbl_literal(&self) -> bool {
-        match self {
-            Self::Dbl(_) | Self::Int(_) => true,
-            _ => false,
-        }
-    }
-
-    /// Clones the double value if `self` is a `Literal::Dbl`, otherwise returns
-    /// `None`.
-    pub fn get_dbl(&self) -> Option<f64> {
-        match self {
-            Self::Dbl(val) => Some(val.clone()),
-            Self::Int(val) => Some(*val as f64),
-            _ => None,
-        }
-    }
-}
-
-impl fmt::Display for Literal {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Int(v) => write!(f, "{v}"),
-            Self::Dbl(v) => write!(f, "{v}"),
-            Self::Str(v) => write!(f, "{v}"),
-        }
-    }
-}
 
 /// Enum representing the tokens available to the lexer.
 #[derive(PartialEq, Debug, Clone)]
@@ -107,10 +40,12 @@ impl Token {
     }
 
     // helper function for handling identifiers
-    pub fn get_ident_or_str_literal(&self) -> Option<&String> {
+    pub fn get_ident_or_str_literal(&self) -> Option<&str> {
         match &self {
             Self::Ident(ident) => Some(ident),
-            Self::Literal(literal) => literal.get_str(),
+            Self::Literal(literal) => {
+                literal.get_str().map(|s| &s[min(s.len(), 1)..s.len() - 1])
+            }
             _ => None,
         }
     }

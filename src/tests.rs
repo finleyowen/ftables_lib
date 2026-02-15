@@ -1,6 +1,6 @@
-use std::fs;
+use std::{fs, rc::Rc};
 
-use crate::{lex::*, parse::*, validate::validate_prgm};
+use crate::{core::*, lex::*, parse::*, validate::validate_prgm};
 use rlrl::prelude::*;
 
 fn lex(s: &str) -> anyhow::Result<TokenQueue<Token>> {
@@ -30,7 +30,7 @@ fn maps_to_column_schema(s: &str) -> anyhow::Result<bool> {
     Ok(out == s)
 }
 
-fn parse_prgm_from_str(s: &str) -> anyhow::Result<Prgm> {
+fn parse_prgm_from_str(s: &str) -> anyhow::Result<SpreadsheetSchema> {
     let mut tq = lex(s)?;
     let prgm = tq.parse(parse_prgm)?;
     Ok(prgm)
@@ -82,12 +82,12 @@ fn stmt_test() -> anyhow::Result<()> {
     let mut tq = lex("type i1to5 int<1,5>")?;
     let stmt = tq.parse(parse_stmt)?;
     assert!(
-        stmt == Stmt::ParentType(
+        stmt == Stmt::TypeDef(
             "i1to5".into(),
-            ParentType::Int(Range {
+            Rc::new(ParentType::Int(Range {
                 min: Some(1),
                 max: Some(5)
-            })
+            }))
         )
     );
 
@@ -100,18 +100,23 @@ fn stmt_test() -> anyhow::Result<()> {
 #[test]
 fn ident_test() -> anyhow::Result<()> {
     let ident = "helloWorld";
-    let str_lit = "\"helloWorld\"";
-
     let ident_tok = Token::Ident(ident.into());
-    let str_lit_tok = Token::Literal(Literal::Str(str_lit.into()));
     assert!(
         ident_tok.is_ident_or_str_literal_tok()
-            && ident_tok.get_ident_or_str_literal() == Some(&ident.into()),
+            && ident_tok.get_ident_or_str_literal() == Some(ident),
     );
+
+    let str_lit = "'helloWorld'";
+    let str_lit_tok = Token::Literal(Literal::Str(str_lit.into()));
     assert!(
         str_lit_tok.is_ident_or_str_literal_tok()
-            && str_lit_tok.get_ident_or_str_literal() == Some(&str_lit.into())
+            && str_lit_tok.get_ident_or_str_literal() == Some("helloWorld")
     );
+
+    let str_lit = "''";
+    let str_lit_tok = Token::Literal(Literal::Str(str_lit.into()));
+    assert!(str_lit_tok.get_ident_or_str_literal() == Some(""));
+
     Ok(())
 }
 
@@ -197,7 +202,7 @@ fn parse_prgm_test() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn load_prgm(path: &str) -> anyhow::Result<Prgm> {
+fn load_prgm(path: &str) -> anyhow::Result<SpreadsheetSchema> {
     parse_prgm_from_str(&fs::read_to_string(path)?)
 }
 

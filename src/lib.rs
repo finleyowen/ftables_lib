@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+pub mod codegen;
+pub mod core;
 pub mod lex;
 pub mod parse;
 pub mod validate;

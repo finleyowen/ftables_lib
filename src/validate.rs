@@ -1,22 +1,28 @@
-use crate::parse::{ColumnSchema, ParentType, Prgm, Range, Stmt, TableSchema};
-use std::{collections::HashSet, fmt::Display};
+use crate::core::*;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    rc::Rc,
+};
 
 const STR_LEN_MSG: &str = "String length can't be negative!";
 
-pub struct PrgmValidState {
-    pub dtypes: HashSet<String>,
-    pub tables: HashSet<String>,
+pub enum Symbol {
+    TypeDef(Rc<ParentType>),
+    Table(Rc<TableSchema>),
 }
 
+pub struct SymbolTable(HashMap<String, Symbol>);
+
 pub trait Validate {
-    fn validate(&self, valid_state: &mut PrgmValidState) -> anyhow::Result<()>;
+    fn validate(&self, symbol_table: &mut SymbolTable) -> anyhow::Result<()>;
 }
 
 impl<T> Validate for Range<T>
 where
     T: Display + PartialOrd + Clone,
 {
-    fn validate(&self, _: &mut PrgmValidState) -> anyhow::Result<()> {
+    fn validate(&self, _: &mut SymbolTable) -> anyhow::Result<()> {
         if let Some(min) = self.min.clone()
             && let Some(max) = self.max.clone()
             && min > max
@@ -30,12 +36,12 @@ where
 }
 
 impl Validate for ParentType {
-    fn validate(&self, valid_state: &mut PrgmValidState) -> anyhow::Result<()> {
+    fn validate(&self, symbol_table: &mut SymbolTable) -> anyhow::Result<()> {
         match &self {
-            ParentType::Int(range) => range.validate(valid_state),
-            ParentType::Dbl(range) => range.validate(valid_state),
+            ParentType::Int(range) => range.validate(symbol_table),
+            ParentType::Dbl(range) => range.validate(symbol_table),
             ParentType::Str(range) => {
-                range.validate(valid_state)?;
+                range.validate(symbol_table)?;
                 if let Some(min) = range.min
                     && min < 0
                 {
@@ -51,7 +57,7 @@ impl Validate for ParentType {
                 Ok(())
             }
             ParentType::Ident(ident) => {
-                if !valid_state.dtypes.contains(ident) {
+                if !symbol_table.0.contains_key(ident) {
                     return Err(anyhow::anyhow!("Unrecognised dtype {ident}"));
                 }
                 Ok(())
@@ -61,14 +67,14 @@ impl Validate for ParentType {
 }
 
 impl Validate for ColumnSchema {
-    fn validate(&self, valid_state: &mut PrgmValidState) -> anyhow::Result<()> {
-        self.dtype.parent.validate(valid_state)?;
+    fn validate(&self, symbol_table: &mut SymbolTable) -> anyhow::Result<()> {
+        self.dtype.parent.validate(symbol_table)?;
         Ok(())
     }
 }
 
 impl Validate for TableSchema {
-    fn validate(&self, valid_state: &mut PrgmValidState) -> anyhow::Result<()> {
+    fn validate(&self, symbol_table: &mut SymbolTable) -> anyhow::Result<()> {
         let mut column_names: HashSet<&str> = HashSet::new();
         column_names.reserve(self.columns.len());
 
@@ -80,7 +86,7 @@ impl Validate for TableSchema {
                 ));
             }
 
-            column.validate(valid_state)?;
+            column.validate(symbol_table)?;
         }
 
         Ok(())
@@ -88,45 +94,48 @@ impl Validate for TableSchema {
 }
 
 impl Validate for Stmt {
-    fn validate(&self, valid_state: &mut PrgmValidState) -> anyhow::Result<()> {
+    fn validate(&self, symbol_table: &mut SymbolTable) -> anyhow::Result<()> {
         match self {
-            Self::ParentType(name, parent_type) => {
-                if valid_state.dtypes.insert(name.clone()) == false {
+            Self::TypeDef(name, parent_type) => {
+                if let Some(_) = symbol_table
+                    .0
+                    .insert(name.clone(), Symbol::TypeDef(parent_type.clone()))
+                {
                     return Err(anyhow::anyhow!(
                         "Can't have two defined types named {name}"
                     ));
                 }
-                parent_type.validate(valid_state)?;
+                parent_type.validate(symbol_table)?;
                 return Ok(());
             }
             Self::Table(table) => {
-                if valid_state.tables.insert(table.table_name.clone()) == false
-                {
+                if let Some(_) = symbol_table.0.insert(
+                    table.table_name.clone(),
+                    Symbol::Table(table.clone()),
+                ) {
                     return Err(anyhow::anyhow!(
                         "Can't have two tables named {}",
                         table.table_name
                     ));
                 }
-                table.validate(valid_state)?;
+                table.validate(symbol_table)?;
                 return Ok(());
             }
         }
     }
 }
 
-impl Validate for Prgm {
-    fn validate(&self, valid_state: &mut PrgmValidState) -> anyhow::Result<()> {
+impl Validate for SpreadsheetSchema {
+    fn validate(&self, symbol_table: &mut SymbolTable) -> anyhow::Result<()> {
         for stmt in &self.stmts {
-            stmt.validate(valid_state)?;
+            stmt.validate(symbol_table)?;
         }
         Ok(())
     }
 }
 
-pub fn validate_prgm(prgm: &Prgm) -> anyhow::Result<()> {
-    let mut valid_state = PrgmValidState {
-        dtypes: HashSet::new(),
-        tables: HashSet::new(),
-    };
-    prgm.validate(&mut valid_state)
+pub fn validate_prgm(prgm: &SpreadsheetSchema) -> anyhow::Result<SymbolTable> {
+    let mut sym_table = SymbolTable(HashMap::new());
+    prgm.validate(&mut sym_table)?;
+    Ok(sym_table)
 }

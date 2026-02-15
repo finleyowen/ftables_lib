@@ -1,30 +1,7 @@
+use super::core::*;
 use super::lex::*;
 use rlrl::parse::*;
-use std::fmt::Display;
-
-/// A doubly-ended range of type `T`.
-#[derive(Debug, PartialEq)]
-pub struct Range<T> {
-    pub min: Option<T>,
-    pub max: Option<T>,
-}
-
-impl<T: Display> Display for Range<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<")?;
-        if let Some(min) = &self.min {
-            min.fmt(f)?;
-        }
-        write!(f, ",")?;
-        if let Some(max) = &self.max {
-            max.fmt(f)?;
-        }
-        write!(f, ">")
-    }
-}
-
-/// Type alias over a `Range<T> where T = i32`
-type IntRange = Range<i32>;
+use std::rc::Rc;
 
 pub fn parse_int_range(tq: &TokenQueue<Token>) -> ParseResult<IntRange> {
     // create a mutable copy
@@ -66,9 +43,6 @@ pub fn parse_int_range(tq: &TokenQueue<Token>) -> ParseResult<IntRange> {
 
     Ok((IntRange { min, max }, tq.get_idx()))
 }
-
-/// Type alias over a `Range<T> where T = f64`
-type DblRange = Range<f64>;
 
 pub fn parse_dbl_range(tq: &TokenQueue<Token>) -> ParseResult<DblRange> {
     let mut tq = tq.clone();
@@ -114,23 +88,13 @@ pub fn parse_dbl_range(tq: &TokenQueue<Token>) -> ParseResult<DblRange> {
     Ok((DblRange { min, max }, tq.get_idx()))
 }
 
-/// The basic types available in the application.
-#[derive(Debug, PartialEq)]
-pub enum ParentType {
-    Int(IntRange),
-    Str(IntRange),
-    Dbl(DblRange),
-    Ident(String),
-}
-
 pub fn parse_parent_type(tq: &TokenQueue<Token>) -> ParseResult<ParentType> {
     let mut tq = tq.clone();
 
     let parent_name = tq
         .consume_matching(|tok| tok.is_ident_or_str_literal_tok())?
         .get_ident_or_str_literal()
-        .ok_or(anyhow::anyhow!("Couldn't get type name"))?
-        .clone();
+        .ok_or(anyhow::anyhow!("Couldn't get type name"))?;
 
     match parent_name.to_lowercase().as_str() {
         "int" | "integer" => {
@@ -169,46 +133,7 @@ pub fn parse_parent_type(tq: &TokenQueue<Token>) -> ParseResult<ParentType> {
                 tq.get_idx(),
             ));
         }
-        _ => Ok((ParentType::Ident(parent_name), tq.get_idx())),
-    }
-}
-
-impl Display for ParentType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ParentType::Int(range) => {
-                if range.min.is_none() && range.max.is_none() {
-                    return write!(f, "int");
-                }
-                write!(f, "int{}", range)
-            }
-            ParentType::Dbl(range) => {
-                if range.min.is_none() && range.max.is_none() {
-                    return write!(f, "dbl");
-                }
-                write!(f, "dbl{}", range)
-            }
-            ParentType::Str(range) => {
-                if range.min.is_none() && range.max.is_none() {
-                    return write!(f, "str");
-                }
-                write!(f, "str{}", range,)
-            }
-            ParentType::Ident(val) => write!(f, "{}", val),
-        }
-    }
-}
-
-/// Derived data types in the applicaiton.
-#[derive(Debug, PartialEq)]
-pub struct DType {
-    pub parent: ParentType,
-    pub nullable: bool,
-}
-
-impl Display for DType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.parent, if self.nullable { "?" } else { "" })
+        _ => Ok((ParentType::Ident(parent_name.to_string()), tq.get_idx())),
     }
 }
 
@@ -222,24 +147,6 @@ pub fn parse_dtype(tq: &TokenQueue<Token>) -> ParseResult<DType> {
     Ok((DType { parent, nullable }, tq.get_idx()))
 }
 
-#[derive(Debug, PartialEq)]
-pub struct ColumnSchema {
-    pub column_name: String,
-    pub dtype: DType,
-    pub default_value: Option<Literal>,
-}
-
-impl Display for ColumnSchema {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.default_value {
-            Some(val) => {
-                write!(f, "{}: {} = {}", self.column_name, self.dtype, val)
-            }
-            None => write!(f, "{}: {}", self.column_name, self.dtype),
-        }
-    }
-}
-
 pub fn parse_column_schema(
     tq: &TokenQueue<Token>,
 ) -> ParseResult<ColumnSchema> {
@@ -249,7 +156,7 @@ pub fn parse_column_schema(
         .consume_matching(|tok| tok.is_ident_or_str_literal_tok())?
         .get_ident_or_str_literal()
         .ok_or(anyhow::anyhow!("Couldn't get column name!"))?
-        .clone();
+        .to_string();
 
     tq.consume_eq(Token::Colon)?;
 
@@ -270,16 +177,10 @@ pub fn parse_column_schema(
         ColumnSchema {
             column_name,
             dtype,
-            default_value: default_value.cloned(),
+            default_value: default_value.cloned().into(),
         },
         tq.get_idx(),
     ))
-}
-
-#[derive(Debug, PartialEq)]
-pub struct TableSchema {
-    pub table_name: String,
-    pub columns: Vec<ColumnSchema>,
 }
 
 pub fn parse_table_schema(tq: &TokenQueue<Token>) -> ParseResult<TableSchema> {
@@ -305,17 +206,11 @@ pub fn parse_table_schema(tq: &TokenQueue<Token>) -> ParseResult<TableSchema> {
     tq_mut.consume_eq(Token::CParen)?;
     Ok((
         TableSchema {
-            table_name: table_name.clone(),
+            table_name: table_name.to_string(),
             columns,
         },
         tq_mut.get_idx(),
     ))
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Stmt {
-    ParentType(String, ParentType),
-    Table(TableSchema),
 }
 
 pub fn parse_stmt(tq: &TokenQueue<Token>) -> ParseResult<Stmt> {
@@ -327,15 +222,15 @@ pub fn parse_stmt(tq: &TokenQueue<Token>) -> ParseResult<Stmt> {
                 .consume_matching(|tok| tok.is_ident_or_str_literal_tok())?
                 .get_ident_or_str_literal()
                 .ok_or(anyhow::anyhow!("Couldn't get type name!"))?
-                .clone();
+                .to_string();
 
             let (parent_type, end) = parse_parent_type(&tq)?;
             // tq.consume_eq(Token::)
-            Ok((Stmt::ParentType(type_name.into(), parent_type), end))
+            Ok((Stmt::TypeDef(type_name.into(), Rc::new(parent_type)), end))
         }
         Ok(Token::TableKwd) => {
             let (table_schema, end) = parse_table_schema(&tq)?;
-            Ok((Stmt::Table(table_schema), end))
+            Ok((Stmt::Table(Rc::new(table_schema)), end))
         }
         Ok(tok) => {
             dbg!(tok);
@@ -345,12 +240,7 @@ pub fn parse_stmt(tq: &TokenQueue<Token>) -> ParseResult<Stmt> {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Prgm {
-    pub stmts: Vec<Stmt>,
-}
-
-pub fn parse_prgm(tq: &TokenQueue<Token>) -> ParseResult<Prgm> {
+pub fn parse_prgm(tq: &TokenQueue<Token>) -> ParseResult<SpreadsheetSchema> {
     let mut tq = tq.clone();
     let mut stmts = vec![];
 
@@ -367,5 +257,5 @@ pub fn parse_prgm(tq: &TokenQueue<Token>) -> ParseResult<Prgm> {
         return Err(anyhow::anyhow!("Program ends without a valid statement"));
     }
 
-    Ok((Prgm { stmts }, tq.get_idx()))
+    Ok((SpreadsheetSchema { stmts }, tq.get_idx()))
 }
