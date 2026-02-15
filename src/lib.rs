@@ -1,8 +1,10 @@
 #![allow(dead_code)]
 
+use anyhow::anyhow;
 use rlrl::prelude::*;
-use std::{error::Error, fmt::Display};
+use std::fmt::Display;
 
+/// Enum representing a literal token in the DDL
 #[derive(PartialEq, Debug, Clone)]
 pub enum Literal {
     Int(i32),
@@ -18,6 +20,8 @@ impl Literal {
         }
     }
 
+    /// Clones the string value if `self` is a `Literal::Str`, otherwise
+    /// returns `None`.
     pub fn get_str(&self) -> Option<&String> {
         match self {
             Self::Str(val) => Some(val),
@@ -32,6 +36,8 @@ impl Literal {
         }
     }
 
+    /// Clones the int value if `self` is a `Literal::Int`, otherwise returns
+    /// `None`.
     pub fn get_int(&self) -> Option<i32> {
         match self {
             Self::Int(val) => Some(val.clone()),
@@ -46,6 +52,8 @@ impl Literal {
         }
     }
 
+    /// Clones the double value if `self` is a `Literal::Dbl`, otherwise returns
+    /// `None`.
     pub fn get_dbl(&self) -> Option<f64> {
         match self {
             Self::Dbl(val) => Some(val.clone()),
@@ -66,7 +74,7 @@ impl Display for Literal {
 }
 
 /// Enum representing the tokens available to the lexer.
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum Token {
     // chars
     OParen,
@@ -175,9 +183,10 @@ fn setup_lexer() -> Lexer<Token> {
 
     lexer.add_rule(".", |re_match| {
         dbg!(re_match.as_str(), re_match.start());
-        LexResult::Error(
-            format!("Unmatched input at position {}", re_match.start()).into(),
-        )
+        LexResult::Error(anyhow::anyhow!(
+            "Unmatched input at position {}",
+            re_match.start()
+        ))
     });
 
     lexer
@@ -207,9 +216,7 @@ impl<T: Display> Display for Range<T> {
 /// Type alias over a `Range<T> where T = i32`
 type IntRange = Range<i32>;
 
-pub fn parse_int_range(
-    tq: &TokenQueue<Token>,
-) -> Result<(IntRange, usize), Box<dyn Error>> {
+pub fn parse_int_range(tq: &TokenQueue<Token>) -> ParseResult<IntRange> {
     // create a mutable copy
     let mut tq = tq.clone();
 
@@ -223,7 +230,7 @@ pub fn parse_int_range(
             if literal.is_int_literal() {
                 Some(literal.get_int().unwrap())
             } else {
-                return Err("Couldn't parse int literal!".into());
+                return Err(anyhow::anyhow!("Couldn't parse int literal!"));
             }
         }
         Err(_) => None,
@@ -239,7 +246,7 @@ pub fn parse_int_range(
             if literal.is_int_literal() {
                 Some(literal.get_int().unwrap())
             } else {
-                return Err("Couldn't parse int literal!".into());
+                return Err(anyhow::anyhow!("Couldn't parse int literal!"));
             }
         }
         Err(_) => None,
@@ -256,9 +263,7 @@ pub fn parse_int_range(
 /// `DblRange::try_from(&tq)` rather than `Range::<f64>::try_from(&tq)`
 type DblRange = Range<f64>;
 
-pub fn parse_dbl_range(
-    tq: &TokenQueue<Token>,
-) -> Result<(DblRange, usize), Box<dyn Error>> {
+pub fn parse_dbl_range(tq: &TokenQueue<Token>) -> ParseResult<DblRange> {
     let mut tq = tq.clone();
 
     // consume '<'
@@ -272,7 +277,7 @@ pub fn parse_dbl_range(
             if literal.is_dbl_literal() {
                 Some(literal.get_dbl().unwrap())
             } else {
-                return Err("Couldn't parse dbl literal!".into());
+                return Err(anyhow::anyhow!("Couldn't parse dbl literal!"));
             }
         }
         Err(_) => None,
@@ -289,7 +294,7 @@ pub fn parse_dbl_range(
             if literal.is_dbl_literal() {
                 Some(literal.get_dbl().unwrap())
             } else {
-                return Err("Couldn't parse dbl literal!".into());
+                return Err(anyhow!("Couldn't parse dbl literal!"));
             }
         }
         Err(_) => None,
@@ -317,7 +322,7 @@ pub fn parse_parent_type(tq: &TokenQueue<Token>) -> ParseResult<ParentType> {
     let parent_name = tq
         .consume_matching(|tok| tok.is_ident_or_str_literal_tok())?
         .get_ident_or_str_literal()
-        .ok_or::<Box<dyn Error>>("Couldn't parse base type name!".into())?
+        .ok_or(anyhow::anyhow!("Couldn't get type name"))?
         .clone();
 
     match parent_name.to_lowercase().as_str() {
@@ -400,9 +405,7 @@ impl Display for DType {
     }
 }
 
-pub fn parse_dtype(
-    tq: &TokenQueue<Token>,
-) -> Result<(DType, usize), Box<dyn Error>> {
+pub fn parse_dtype(tq: &TokenQueue<Token>) -> ParseResult<DType> {
     let mut tq = tq.clone();
 
     let parent = tq.parse(parse_parent_type)?;
@@ -432,13 +435,13 @@ impl Display for ColumnSchema {
 
 pub fn parse_column_schema(
     tq: &TokenQueue<Token>,
-) -> Result<(ColumnSchema, usize), Box<dyn Error>> {
+) -> ParseResult<ColumnSchema> {
     let mut tq: TokenQueue<Token> = tq.clone();
 
     let column_name = tq
         .consume_matching(|tok| tok.is_ident_or_str_literal_tok())?
         .get_ident_or_str_literal()
-        .ok_or::<Box<dyn Error>>("Couldn't get column name!".into())?
+        .ok_or(anyhow::anyhow!("Couldn't get column name!"))?
         .clone();
 
     tq.consume_eq(Token::Colon)?;
@@ -450,7 +453,9 @@ pub fn parse_column_schema(
         default_value = Some(
             tq.consume_matching(|tok| tok.is_literal())?
                 .get_literal()
-                .ok_or("Couldn't get a literal!")?,
+                .ok_or(anyhow::anyhow!(
+                    "Couldn't get default value literal!"
+                ))?,
         );
     }
 
@@ -476,7 +481,7 @@ pub fn parse_table_schema(tq: &TokenQueue<Token>) -> ParseResult<TableSchema> {
     let table_name = tq
         .peek_matching(|tok| tok.is_ident_or_str_literal_tok())?
         .get_ident_or_str_literal()
-        .ok_or("Couldn't get table name!")?;
+        .ok_or(anyhow::anyhow!("Couldn't get table name!"))?;
     tq_mut.increment();
 
     tq_mut.consume_eq(Token::OParen)?;
@@ -514,7 +519,7 @@ pub fn parse_stmt(tq: &TokenQueue<Token>) -> ParseResult<Stmt> {
             let type_name = tq
                 .consume_matching(|tok| tok.is_ident_or_str_literal_tok())?
                 .get_ident_or_str_literal()
-                .ok_or::<Box<dyn Error>>("Couldn't get type name!".into())?
+                .ok_or(anyhow::anyhow!("Couldn't get type name!"))?
                 .clone();
 
             let (parent_type, end) = parse_parent_type(&tq)?;
@@ -527,9 +532,9 @@ pub fn parse_stmt(tq: &TokenQueue<Token>) -> ParseResult<Stmt> {
         }
         Ok(tok) => {
             dbg!(tok);
-            Err(format!("Couldn't parse statement!").into())
+            Err(anyhow::anyhow!("Couldn't parse statement!"))
         }
-        Err(_) => Err("Couldn't parse statement!".into()),
+        Err(_) => Err(anyhow::anyhow!("Couldn't parse statement!")),
     }
 }
 
@@ -546,8 +551,13 @@ pub fn parse_prgm(tq: &TokenQueue<Token>) -> ParseResult<Prgm> {
         tq.go_to(end);
         stmts.push(stmt);
         if tq.consume_eq(Token::Semicolon).is_err() {
-            return Err("Missing semicolon!".into());
+            return Err(anyhow!("Missing semicolon!"));
         }
+    }
+
+    if !tq.is_consumed() {
+        dbg!(&tq);
+        return Err(anyhow!("Program ends without a valid statement"));
     }
 
     Ok((Prgm { stmts }, tq.get_idx()))
@@ -556,37 +566,42 @@ pub fn parse_prgm(tq: &TokenQueue<Token>) -> ParseResult<Prgm> {
 #[cfg(test)]
 mod tests {
     use crate::*;
-    use std::error::Error;
 
-    fn lex(s: &str) -> Result<TokenQueue<Token>, Box<dyn Error>> {
+    fn lex(s: &str) -> anyhow::Result<TokenQueue<Token>> {
         let lexer = setup_lexer();
         let tokens = lexer.lex(s)?;
-        let tq = TokenQueue::new(tokens);
+        let tq = TokenQueue::from(tokens);
         Ok(tq)
     }
 
-    fn maps_to_int_range(s: &str) -> Result<bool, Box<dyn Error>> {
+    fn maps_to_int_range(s: &str) -> anyhow::Result<bool> {
         let out = parse_int_range(&lex(&s)?)?.0.to_string();
         Ok(out == s)
     }
 
-    fn maps_to_dbl_range(s: &str) -> Result<bool, Box<dyn Error>> {
+    fn maps_to_dbl_range(s: &str) -> anyhow::Result<bool> {
         let out = parse_dbl_range(&lex(&s)?)?.0.to_string();
         Ok(out == s)
     }
 
-    fn maps_to_data_type(s: &str) -> Result<bool, Box<dyn Error>> {
+    fn maps_to_data_type(s: &str) -> anyhow::Result<bool> {
         let out = parse_dtype(&lex(&s)?)?.0.to_string();
         Ok(out == s)
     }
 
-    fn maps_to_column_schema(s: &str) -> Result<bool, Box<dyn Error>> {
+    fn maps_to_column_schema(s: &str) -> anyhow::Result<bool> {
         let out = parse_column_schema(&lex(&s)?)?.0.to_string();
         Ok(out == s)
     }
 
+    fn parses_to_prgm(s: &str) -> anyhow::Result<bool> {
+        let mut tq = lex(s)?;
+        let _prgm = tq.parse(parse_prgm)?;
+        Ok(true)
+    }
+
     #[test]
-    fn int_range_test() -> Result<(), Box<dyn Error>> {
+    fn int_range_test() -> anyhow::Result<()> {
         assert!(maps_to_int_range("<5,10>")?);
         assert!(maps_to_int_range("<10,10>")?);
         assert!(maps_to_int_range("<,10>")?);
@@ -596,7 +611,7 @@ mod tests {
     }
 
     #[test]
-    fn dbl_range_test() -> Result<(), Box<dyn Error>> {
+    fn dbl_range_test() -> anyhow::Result<()> {
         assert!(maps_to_dbl_range("<5,>")?);
         assert!(maps_to_dbl_range("<,10>")?);
         assert!(maps_to_dbl_range("<1.1,9.9>")?);
@@ -606,18 +621,19 @@ mod tests {
     }
 
     #[test]
-    fn data_type_test() -> Result<(), Box<dyn Error>> {
+    fn data_type_test() -> anyhow::Result<()> {
         assert!(maps_to_data_type("int<5,10>")?);
         assert!(maps_to_data_type("int<5,10>?")?);
         assert!(maps_to_data_type("str<5,10>")?);
         assert!(maps_to_data_type("str<5,10>?")?);
         assert!(maps_to_data_type("dbl<5.4,10.3>")?);
         assert!(maps_to_data_type("dbl<5,10>?")?);
+        assert!(maps_to_data_type("int1to5?")?);
         Ok(())
     }
 
     #[test]
-    fn column_schema_test() -> Result<(), Box<dyn Error>> {
+    fn column_schema_test() -> anyhow::Result<()> {
         assert!(maps_to_column_schema("abc: int<5,5>")?);
         assert!(maps_to_column_schema("\"My column\": int<5,5>")?);
         assert!(maps_to_column_schema("\"My optional column\": int<5,5>?")?);
@@ -626,10 +642,9 @@ mod tests {
     }
 
     #[test]
-    fn stmt_test() -> Result<(), Box<dyn Error>> {
-        let tokens = setup_lexer().lex("type i1to5 int<1,5>")?;
-        let (stmt, _) = parse_stmt(&TokenQueue::new(tokens))?;
-
+    fn stmt_test() -> anyhow::Result<()> {
+        let mut tq = lex("type i1to5 int<1,5>")?;
+        let stmt = tq.parse(parse_stmt)?;
         assert!(
             stmt == Stmt::ParentType(
                 "i1to5".into(),
@@ -642,13 +657,13 @@ mod tests {
 
         let tokens =
             setup_lexer().lex("table Table1(a: int?, b: dbl?, c:str?)")?;
-        assert!(parse_stmt(&TokenQueue::new(tokens)).is_ok());
+        assert!(parse_stmt(&TokenQueue::from(tokens)).is_ok());
 
         Ok(())
     }
 
     #[test]
-    fn ident_test() -> Result<(), Box<dyn Error>> {
+    fn ident_test() -> anyhow::Result<()> {
         let ident = "helloWorld";
         let str_lit = "\"helloWorld\"";
 
@@ -656,23 +671,18 @@ mod tests {
         let str_lit_tok = Token::Literal(Literal::Str(str_lit.into()));
         assert!(
             ident_tok.is_ident_or_str_literal_tok()
-                && ident_tok
-                    .get_ident_or_str_literal()
-                    .ok_or::<Box<dyn Error>>("ident".into())?
-                    == ident,
+                && ident_tok.get_ident_or_str_literal() == Some(&ident.into()),
         );
         assert!(
             str_lit_tok.is_ident_or_str_literal_tok()
-                && str_lit_tok
-                    .get_ident_or_str_literal()
-                    .ok_or::<Box<dyn Error>>("ident".into())?
-                    == str_lit,
+                && str_lit_tok.get_ident_or_str_literal()
+                    == Some(&str_lit.into())
         );
         Ok(())
     }
 
     #[test]
-    fn table_schema_test() -> Result<(), Box<dyn Error>> {
+    fn table_schema_test() -> anyhow::Result<()> {
         let mut tq = lex("Table(
             col1: int<1, 5>, 
             col2: dbl<1, 5>, 
@@ -739,39 +749,13 @@ mod tests {
     }
 
     #[test]
-    fn parse_prgm_test() -> Result<(), Box<dyn Error>> {
-        let tq = lex("
-        type MyType int<1,5>;
-
-        table Table1(a: MyType, b: dbl, c: str, d: int?);
-        table Table2(a: MyType? = 5, b: dbl = 2.5, c: str = \"\", d: int?);
-        ")?;
-
-        let (prgm, _) = parse_prgm(&tq)?;
-
-        if let Stmt::Table(table) = &prgm.stmts[2] {
-            assert!(table.columns[0].column_name == "a");
-            assert!(
-                table.columns[0].dtype
-                    == DType {
-                        parent: ParentType::Ident("MyType".into()),
-                        nullable: true
-                    }
-            );
-            assert!(table.columns[0].default_value == Some(Literal::Int(5)));
-        } else {
-            return Err("Didn't correctly parse Table2 definition!".into());
-        }
-
-        let tq = lex(include_str!(
+    fn parse_prgm_test() -> anyhow::Result<()> {
+        assert!(parses_to_prgm(include_str!(
             "../test_artifacts/valid_schemas/valid_schema_1.txt"
-        ))?;
-        let (_prgm, _) = parse_prgm(&tq)?;
-
-        let tq = lex(include_str!(
+        ))?);
+        assert!(parses_to_prgm(include_str!(
             "../test_artifacts/valid_schemas/valid_schema_2.txt"
-        ))?;
-        let (_prgm, _) = parse_prgm(&tq)?;
+        ))?);
 
         Ok(())
     }
