@@ -18,7 +18,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f0e0fee31ef5ed1ba1316088939cea399010ed7731dba877ed44aeb407a75ea"
 
 [[package]]
-name = "fsheets_lib"
+name = "ftables_lib"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -88,7 +88,7 @@ checksum = "a96887878f22d7bad8a3b6dc5b7440e0ada9a245242924394987b21cf2210a4c"
 [[package]]
 name = "rlrl"
 version = "0.1.0"
-source = "git+https://www.github.com/finleyowen/rlrl.git#738cd14fde9d01dd72b2f921e2b20529ce8a53f8"
+source = "git+https://www.github.com/finleyowen/rlrl.git#ad4cf973ff60e3c8cb383037b0f7c277277dc4a6"
 dependencies = [
  "anyhow",
  "regex",

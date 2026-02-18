@@ -1,7 +1,6 @@
-use std::cmp::min;
-
 use super::core::Literal;
 use rlrl::lex::*;
+use std::rc::Rc;
 
 /// Enum representing the tokens available to the lexer.
 #[derive(PartialEq, Debug, Clone)]
@@ -23,7 +22,7 @@ pub enum Token {
     SchemaKwd,
 
     // ident
-    Ident(String),
+    Ident(Rc<str>),
 
     // literals
     Literal(Literal),
@@ -34,18 +33,16 @@ impl Token {
     pub fn is_ident_or_str_literal_tok(&self) -> bool {
         match self {
             Self::Ident(_) => true,
-            Self::Literal(literal) => literal.is_str_literal(),
+            Self::Literal(literal) => literal.is_str(),
             _ => false,
         }
     }
 
     // helper function for handling identifiers
-    pub fn get_ident_or_str_literal(&self) -> Option<&str> {
+    pub fn get_ident_or_str_literal(&self) -> Option<Rc<str>> {
         match &self {
-            Self::Ident(ident) => Some(ident),
-            Self::Literal(literal) => {
-                literal.get_str().map(|s| &s[min(s.len(), 1)..s.len() - 1])
-            }
+            Self::Ident(ident) => Some(ident.clone()),
+            Self::Literal(literal) => literal.get_str(),
             _ => None,
         }
     }

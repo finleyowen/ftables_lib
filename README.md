@@ -1,6 +1,6 @@
-# FSheets Rust Back-end
+# FTables Rust Back-end
 
-Rusty backend for [FSheets](https://www.github.com/finleyowen/fsheets), including the parser for the Data Definition Language (DDL) implemented with [`rlrl`](https://www.github.com/finleyowen/rlrl).
+Rusty backend for [FTables](https://www.github.com/finleyowen/ftables), including the parser for the Data Definition Language (DDL) implemented with [`rlrl`](https://www.github.com/finleyowen/rlrl).
 
 ## DDL Examples
 

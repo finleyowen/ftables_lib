@@ -1,15 +1,17 @@
 use std::{collections::HashMap, rc::Rc};
 
+use crate::core::schema::{SharedDataType, SharedTableSchema};
+
 /// Enum representing a literal token in the DDL
 #[derive(PartialEq, Debug, Clone)]
 pub enum Literal {
     Int(i32),
     Dbl(f64),
-    Str(String),
+    Str(Rc<str>),
 }
 
 impl Literal {
-    pub fn is_str_literal(&self) -> bool {
+    pub fn is_str(&self) -> bool {
         match self {
             Self::Str(_) => true,
             _ => false,
@@ -18,14 +20,14 @@ impl Literal {
 
     /// Clones the string value if `self` is a `Literal::Str`, otherwise
     /// returns `None`.
-    pub fn get_str(&self) -> Option<&String> {
+    pub fn get_str(&self) -> Option<Rc<str>> {
         match self {
-            Self::Str(val) => Some(val),
+            Self::Str(val) => Some(val.clone()),
             _ => None,
         }
     }
 
-    pub fn is_int_literal(&self) -> bool {
+    pub fn is_i32(&self) -> bool {
         match self {
             Self::Int(_) => true,
             _ => false,
@@ -34,14 +36,14 @@ impl Literal {
 
     /// Clones the int value if `self` is a `Literal::Int`, otherwise returns
     /// `None`.
-    pub fn get_int(&self) -> Option<i32> {
+    pub fn get_i32(&self) -> Option<i32> {
         match self {
             Self::Int(val) => Some(val.clone()),
             _ => None,
         }
     }
 
-    pub fn is_dbl_literal(&self) -> bool {
+    pub fn is_f64(&self) -> bool {
         match self {
             Self::Dbl(_) | Self::Int(_) => true,
             _ => false,
@@ -50,7 +52,7 @@ impl Literal {
 
     /// Clones the double value if `self` is a `Literal::Dbl`, otherwise returns
     /// `None`.
-    pub fn get_dbl(&self) -> Option<f64> {
+    pub fn get_f64(&self) -> Option<f64> {
         match self {
             Self::Dbl(val) => Some(val.clone()),
             Self::Int(val) => Some(*val as f64),
@@ -59,68 +61,20 @@ impl Literal {
     }
 }
 
-/// A doubly-ended range of type `T`.
-#[derive(Debug, PartialEq)]
-pub struct Range<T> {
-    pub min: Option<T>,
-    pub max: Option<T>,
-}
-
-/// Type alias over a `Range<T> where T = i32`
-pub type IntRange = Range<i32>;
-
-/// Type alias over a `Range<T> where T = f64`
-pub type DblRange = Range<f64>;
-
-/// Expressions representing the basic types available in the application.
-#[derive(Debug, PartialEq)]
-pub enum ParentTypeExpr {
-    Int(IntRange),
-    Str(IntRange),
-    Dbl(DblRange),
-    Ident(String),
-}
-
-pub enum ParentType {
-    Int(IntRange),
-    Str(IntRange),
-    Dbl(DblRange),
-}
-
-/// Derived data types in the applicaiton.
-#[derive(Debug, PartialEq)]
-pub struct DTypeExpr {
-    pub parent: ParentTypeExpr,
-    pub nullable: bool,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct ColumnSchemaExpr {
-    pub column_name: String,
-    pub dtype: DTypeExpr,
-    pub default_value: Option<Literal>,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct TableSchemaExpr {
-    pub table_name: String,
-    pub columns: Vec<ColumnSchemaExpr>,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Stmt {
-    TypeDef(String, Rc<ParentTypeExpr>),
-    TableSchema(Rc<TableSchemaExpr>),
-}
-
-#[derive(Debug, PartialEq)]
-pub struct DbSchema {
-    pub stmts: Vec<Stmt>,
-}
-
+/// A symbol in the symbol table; the value of a variable.
+#[derive(Debug)]
 pub enum Symbol {
-    TypeDef(Rc<ParentTypeExpr>),
-    Table(Rc<TableSchemaExpr>),
+    TableSchema(SharedTableSchema),
+    DataType(SharedDataType),
 }
 
-pub type SymbolTable = HashMap<String, Symbol>;
+/// A table or map where the keys are variable names/identifiers and the values
+/// are of type [Symbol].
+pub type SymbolTable = HashMap<Rc<str>, Symbol>;
+
+/// A statement in the DDL.
+#[derive(Debug)]
+pub enum Stmt {
+    TableSchema(SharedTableSchema),
+    DataType(Rc<str>, SharedDataType),
+}

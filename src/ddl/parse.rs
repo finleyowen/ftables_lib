@@ -1,265 +1,342 @@
-use super::core::*;
-use super::lex::*;
-use rlrl::parse::*;
 use std::rc::Rc;
 
-pub fn parse_int_range(tq: &TokenQueue<Token>) -> ParseResult<IntRange> {
-    // create a mutable copy
-    let mut tq = tq.clone();
-
-    tq.consume_eq(Token::OAngle)?;
-
-    // consume min
-    let min = match tq.clone().peek_matching(|token| token.is_literal()) {
-        Ok(token) => {
-            tq.increment();
-            let literal = token.get_literal().unwrap();
-            if literal.is_int_literal() {
-                Some(literal.get_int().unwrap())
-            } else {
-                return Err(anyhow::anyhow!("Couldn't parse int literal!"));
-            }
-        }
-        Err(_) => None,
-    };
-
-    tq.consume_eq(Token::Comma)?;
-
-    // consume max
-    let max = match tq.clone().peek_matching(|token| token.is_literal()) {
-        Ok(token) => {
-            tq.increment();
-            let literal = token.get_literal().unwrap();
-            if literal.is_int_literal() {
-                Some(literal.get_int().unwrap())
-            } else {
-                return Err(anyhow::anyhow!("Couldn't parse int literal!"));
-            }
-        }
-        Err(_) => None,
-    };
-
-    tq.consume_eq(Token::CAngle)?;
-
-    Ok((IntRange { min, max }, tq.get_idx()))
+use crate::{
+    core::schema::{
+        ColumnSchema, DataType, DblDataType, IntDataType, StrDataType,
+        TableSchema,
+    },
+    ddl::{
+        core::{Stmt, Symbol, SymbolTable},
+        lex::Token,
+    },
+};
+use rlrl::parse::{ParseResult, TokenQueue};
+pub trait Parse: Sized {
+    fn parse(
+        tq: &TokenQueue<Token>,
+        symtable: &mut SymbolTable,
+    ) -> ParseResult<Self>;
 }
 
-pub fn parse_dbl_range(tq: &TokenQueue<Token>) -> ParseResult<DblRange> {
-    let mut tq = tq.clone();
+impl Parse for IntDataType {
+    fn parse(
+        tq: &TokenQueue<Token>,
+        _symtable: &mut SymbolTable,
+    ) -> ParseResult<Self> {
+        // create a mutable copy
+        let mut tq = tq.clone();
 
-    // consume '<'
-    tq.consume_eq(Token::OAngle)?;
+        tq.consume_eq(Token::OAngle)?;
 
-    // consume min
-    let min = match tq.clone().peek_matching(|token| token.is_literal()) {
-        Ok(token) => {
-            tq.increment();
-            let literal = token.get_literal().unwrap();
-            if literal.is_dbl_literal() {
-                Some(literal.get_dbl().unwrap())
-            } else {
-                return Err(anyhow::anyhow!("Couldn't parse dbl literal!"));
+        // consume min
+        let min = match tq.clone().peek_matching(|token| token.is_literal()) {
+            Ok(token) => {
+                tq.increment();
+                let literal = token.get_literal().unwrap();
+                if literal.is_i32() {
+                    Some(literal.get_i32().unwrap())
+                } else {
+                    return Err(anyhow::anyhow!("Couldn't parse int literal!"));
+                }
             }
-        }
-        Err(_) => None,
-    };
+            Err(_) => None,
+        };
 
-    // consume ','
-    tq.consume_eq(Token::Comma)?;
+        tq.consume_eq(Token::Comma)?;
 
-    // consume max
-    let max = match tq.clone().peek_matching(|token| token.is_literal()) {
-        Ok(token) => {
-            tq.increment();
-            let literal = token.get_literal().unwrap();
-            if literal.is_dbl_literal() {
-                Some(literal.get_dbl().unwrap())
-            } else {
-                return Err(anyhow::anyhow!("Couldn't parse dbl literal!"));
+        // consume max
+        let max = match tq.clone().peek_matching(|token| token.is_literal()) {
+            Ok(token) => {
+                tq.increment();
+                let literal = token.get_literal().unwrap();
+                if literal.is_i32() {
+                    Some(literal.get_i32().unwrap())
+                } else {
+                    return Err(anyhow::anyhow!("Couldn't parse int literal!"));
+                }
             }
-        }
-        Err(_) => None,
-    };
+            Err(_) => None,
+        };
 
-    // consume '>'
-    tq.consume_eq(Token::CAngle)?;
+        tq.consume_eq(Token::CAngle)?;
 
-    // done
-    Ok((DblRange { min, max }, tq.get_idx()))
+        // consume ?
+        let nullable = tq.consume_eq(Token::QMark).is_ok();
+
+        // done
+        Ok((IntDataType::new(min, max, nullable), tq.get_idx()))
+    }
 }
 
-pub fn parse_parent_type(
+impl Parse for DblDataType {
+    fn parse(
+        tq: &TokenQueue<Token>,
+        _symtable: &mut SymbolTable,
+    ) -> ParseResult<Self> {
+        // create a mutable copy
+        let mut tq = tq.clone();
+
+        tq.consume_eq(Token::OAngle)?;
+
+        // consume min
+        let min = match tq.clone().peek_matching(|token| token.is_literal()) {
+            Ok(token) => {
+                tq.increment();
+                let literal = token.get_literal().unwrap();
+                if literal.is_i32() {
+                    Some(literal.get_f64().unwrap())
+                } else {
+                    return Err(anyhow::anyhow!("Couldn't parse int literal!"));
+                }
+            }
+            Err(_) => None,
+        };
+
+        tq.consume_eq(Token::Comma)?;
+
+        // consume max
+        let max = match tq.clone().peek_matching(|token| token.is_literal()) {
+            Ok(token) => {
+                tq.increment();
+                let literal = token.get_literal().unwrap();
+                if literal.is_i32() {
+                    Some(literal.get_f64().unwrap())
+                } else {
+                    return Err(anyhow::anyhow!("Couldn't parse int literal!"));
+                }
+            }
+            Err(_) => None,
+        };
+
+        tq.consume_eq(Token::CAngle)?;
+
+        // consume ?
+        let nullable = tq.consume_eq(Token::QMark).is_ok();
+
+        // done
+        Ok((DblDataType::new(min, max, nullable), tq.get_idx()))
+    }
+}
+
+impl Parse for StrDataType {
+    fn parse(
+        tq: &TokenQueue<Token>,
+        _symtable: &mut SymbolTable,
+    ) -> ParseResult<Self> {
+        // create a mutable copy
+        let mut tq = tq.clone();
+
+        tq.consume_eq(Token::OAngle)?;
+
+        // consume min
+        let min = match tq.clone().peek_matching(|token| token.is_literal()) {
+            Ok(token) => {
+                tq.increment();
+                let literal = token.get_literal().unwrap();
+                if literal.is_i32() {
+                    Some(literal.get_i32().unwrap().try_into()?)
+                } else {
+                    return Err(anyhow::anyhow!("Couldn't parse int literal!"));
+                }
+            }
+            Err(_) => None,
+        };
+
+        tq.consume_eq(Token::Comma)?;
+
+        // consume max
+        let max = match tq.clone().peek_matching(|token| token.is_literal()) {
+            Ok(token) => {
+                tq.increment();
+                let literal = token.get_literal().unwrap();
+                if literal.is_i32() {
+                    Some(literal.get_i32().unwrap().try_into()?)
+                } else {
+                    return Err(anyhow::anyhow!("Couldn't parse int literal!"));
+                }
+            }
+            Err(_) => None,
+        };
+
+        tq.consume_eq(Token::CAngle)?;
+
+        // consume ?
+        let nullable = tq.consume_eq(Token::QMark).is_ok();
+
+        // done
+        Ok((StrDataType::new(min, max, nullable), tq.get_idx()))
+    }
+}
+
+fn parse_data_type(
     tq: &TokenQueue<Token>,
-) -> ParseResult<ParentTypeExpr> {
+    symtable: &mut SymbolTable,
+) -> ParseResult<Rc<dyn DataType>> {
     let mut tq = tq.clone();
 
-    let parent_name = tq
-        .consume_matching(|tok| tok.is_ident_or_str_literal_tok())?
+    let ident_tok =
+        tq.consume_matching(|tok| tok.is_ident_or_str_literal_tok())?;
+    let ident = ident_tok
         .get_ident_or_str_literal()
-        .ok_or(anyhow::anyhow!("Couldn't get type name"))?;
+        .ok_or(anyhow::anyhow!("Expected an identifier!"))?;
 
-    match parent_name.to_lowercase().as_str() {
-        "int" | "integer" => {
-            if let Ok((range, end)) = parse_int_range(&tq) {
-                return Ok((ParentTypeExpr::Int(range), end));
+    match &ident as &str {
+        "int" => {
+            let (dtype, end) = IntDataType::parse(&tq, symtable)?;
+            return Ok((Rc::new(dtype), end));
+        }
+        "dbl" => {
+            let (dtype, end) = DblDataType::parse(&tq, symtable)?;
+            return Ok((Rc::new(dtype), end));
+        }
+        "str" => {
+            let (dtype, end) = StrDataType::parse(&tq, symtable)?;
+            return Ok((Rc::new(dtype), end));
+        }
+        _ => {
+            if let Some(Symbol::DataType(dtype)) = symtable.get(&ident) {
+                return Ok((dtype.clone(), tq.get_idx()));
+            } else {
+                return Err(anyhow::anyhow!(
+                    "Unrecognised type name {}",
+                    ident
+                ));
             }
-            return Ok((
-                ParentTypeExpr::Int(Range {
-                    min: None,
-                    max: None,
-                }),
-                tq.get_idx(),
-            ));
         }
-        "str" | "string" | "text" => {
-            if let Ok((range, end)) = parse_int_range(&tq) {
-                return Ok((ParentTypeExpr::Str(range), end));
+    }
+}
+
+impl Parse for ColumnSchema {
+    fn parse(
+        tq: &TokenQueue<Token>,
+        symtable: &mut SymbolTable,
+    ) -> ParseResult<Self> {
+        let mut tq: TokenQueue<Token> = tq.clone();
+
+        let column_name = tq
+            .consume_matching(|tok| tok.is_ident_or_str_literal_tok())?
+            .get_ident_or_str_literal()
+            .ok_or(anyhow::anyhow!("Couldn't get column name!"))?
+            .into();
+
+        tq.consume_eq(Token::Colon)?;
+
+        let column_type = tq.parse_with_mut(parse_data_type, symtable)?;
+
+        Ok((ColumnSchema::new(column_name, column_type), tq.get_idx()))
+    }
+}
+
+impl Parse for TableSchema {
+    fn parse(
+        tq: &TokenQueue<Token>,
+        symtable: &mut SymbolTable,
+    ) -> ParseResult<Self> {
+        let mut tq_mut = tq.clone();
+
+        let table_name = tq
+            .peek_matching(|tok| tok.is_ident_or_str_literal_tok())?
+            .get_ident_or_str_literal()
+            .ok_or(anyhow::anyhow!("Couldn't get table name!"))?;
+        tq_mut.increment();
+
+        tq_mut.consume_eq(Token::OParen)?;
+
+        let mut columns = vec![];
+
+        while let Ok(column) =
+            tq_mut.parse_with_mut(ColumnSchema::parse, symtable)
+        {
+            columns.push(column);
+            if tq_mut.consume_eq(Token::Comma).is_err() {
+                break;
             }
-            return Ok((
-                ParentTypeExpr::Str(Range {
-                    min: None,
-                    max: None,
-                }),
-                tq.get_idx(),
-            ));
         }
-        "dbl" | "double" | "float" => {
-            if let Ok((range, end)) = parse_dbl_range(&tq) {
-                return Ok((ParentTypeExpr::Dbl(range), end));
+
+        tq_mut.consume_eq(Token::CParen)?;
+        Ok((TableSchema::new(table_name, columns), tq_mut.get_idx()))
+    }
+}
+
+impl Parse for Stmt {
+    fn parse(
+        tq: &TokenQueue<Token>,
+        symtable: &mut SymbolTable,
+    ) -> ParseResult<Self> {
+        let mut tq = tq.clone();
+
+        match tq.consume() {
+            Ok(Token::TypeKwd) => {
+                let type_name: Rc<str> = tq
+                    .consume_matching(|tok| tok.is_ident_or_str_literal_tok())?
+                    .get_ident_or_str_literal()
+                    .ok_or(anyhow::anyhow!("Couldn't get type name!"))?
+                    .into();
+
+                let data_type = tq.parse_with_mut(parse_data_type, symtable)?;
+
+                if let Some(_) = symtable.insert(
+                    type_name.clone(),
+                    Symbol::DataType(data_type.clone()),
+                ) {
+                    return Err(anyhow::anyhow!(
+                        "Symbol {} is already assigned!",
+                        &type_name
+                    ));
+                }
+
+                Ok((Stmt::DataType(type_name, data_type), tq.get_idx()))
             }
-            return Ok((
-                ParentTypeExpr::Dbl(Range {
-                    min: None,
-                    max: None,
-                }),
-                tq.get_idx(),
-            ));
+            Ok(Token::TableKwd) => {
+                let table_schema =
+                    Rc::new(tq.parse_with_mut(TableSchema::parse, symtable)?);
+
+                if let Some(_) = symtable.insert(
+                    table_schema.get_name().clone(),
+                    Symbol::TableSchema(table_schema.clone()),
+                ) {
+                    return Err(anyhow::anyhow!(
+                        "Symbol {} is already assigned!",
+                        &table_schema.get_name().clone()
+                    ));
+                }
+
+                Ok((Stmt::TableSchema(table_schema), tq.get_idx()))
+            }
+            Ok(tok) => {
+                dbg!(tok);
+                Err(anyhow::anyhow!("Couldn't parse statement!"))
+            }
+            Err(_) => Err(anyhow::anyhow!("Couldn't parse statement!")),
         }
-        _ => Ok((ParentTypeExpr::Ident(parent_name.to_string()), tq.get_idx())),
     }
 }
 
-pub fn parse_dtype(tq: &TokenQueue<Token>) -> ParseResult<DTypeExpr> {
-    let mut tq = tq.clone();
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
 
-    let parent = tq.parse(parse_parent_type)?;
+    use rlrl::parse::TokenQueue;
 
-    let nullable = tq.consume_eq(Token::QMark).is_ok();
+    use crate::ddl::{
+        lex::{Token, setup_lexer},
+        parse::{Parse, Stmt},
+    };
 
-    Ok((DTypeExpr { parent, nullable }, tq.get_idx()))
-}
-
-pub fn parse_column_schema(
-    tq: &TokenQueue<Token>,
-) -> ParseResult<ColumnSchemaExpr> {
-    let mut tq: TokenQueue<Token> = tq.clone();
-
-    let column_name = tq
-        .consume_matching(|tok| tok.is_ident_or_str_literal_tok())?
-        .get_ident_or_str_literal()
-        .ok_or(anyhow::anyhow!("Couldn't get column name!"))?
-        .to_string();
-
-    tq.consume_eq(Token::Colon)?;
-
-    let dtype = tq.parse(parse_dtype)?;
-
-    let mut default_value = None;
-    if tq.consume_eq(Token::Equals).is_ok() {
-        default_value = Some(
-            tq.consume_matching(|tok| tok.is_literal())?
-                .get_literal()
-                .ok_or(anyhow::anyhow!(
-                    "Couldn't get default value literal!"
-                ))?,
-        );
+    fn lex(s: &str) -> anyhow::Result<TokenQueue<Token>> {
+        let lexer = setup_lexer();
+        Ok(TokenQueue::from(lexer.lex(s)?))
     }
 
-    Ok((
-        ColumnSchemaExpr {
-            column_name,
-            dtype,
-            default_value: default_value.cloned().into(),
-        },
-        tq.get_idx(),
-    ))
-}
+    #[test]
+    fn parse_stmt_test() -> anyhow::Result<()> {
+        let mut tq = lex("type myType int<1,5>")?;
+        let mut symtable = HashMap::new();
 
-pub fn parse_table_schema(
-    tq: &TokenQueue<Token>,
-) -> ParseResult<TableSchemaExpr> {
-    let mut tq_mut = tq.clone();
+        let stmt = tq.parse_with_mut(Stmt::parse, &mut symtable)?;
+        dbg!(&stmt);
+        dbg!(&symtable);
 
-    let table_name = tq
-        .peek_matching(|tok| tok.is_ident_or_str_literal_tok())?
-        .get_ident_or_str_literal()
-        .ok_or(anyhow::anyhow!("Couldn't get table name!"))?;
-    tq_mut.increment();
-
-    tq_mut.consume_eq(Token::OParen)?;
-
-    let mut columns = vec![];
-
-    while let Ok(column) = tq_mut.parse(parse_column_schema) {
-        columns.push(column);
-        if tq_mut.consume_eq(Token::Comma).is_err() {
-            break;
-        }
+        Ok(())
     }
-
-    tq_mut.consume_eq(Token::CParen)?;
-    Ok((
-        TableSchemaExpr {
-            table_name: table_name.to_string(),
-            columns,
-        },
-        tq_mut.get_idx(),
-    ))
-}
-
-pub fn parse_stmt(tq: &TokenQueue<Token>) -> ParseResult<Stmt> {
-    let mut tq = tq.clone();
-
-    match tq.consume() {
-        Ok(Token::TypeKwd) => {
-            let type_name = tq
-                .consume_matching(|tok| tok.is_ident_or_str_literal_tok())?
-                .get_ident_or_str_literal()
-                .ok_or(anyhow::anyhow!("Couldn't get type name!"))?
-                .to_string();
-
-            let (parent_type, end) = parse_parent_type(&tq)?;
-            // tq.consume_eq(Token::)
-            Ok((Stmt::TypeDef(type_name.into(), Rc::new(parent_type)), end))
-        }
-        Ok(Token::TableKwd) => {
-            let (table_schema, end) = parse_table_schema(&tq)?;
-            Ok((Stmt::TableSchema(Rc::new(table_schema)), end))
-        }
-        Ok(tok) => {
-            dbg!(tok);
-            Err(anyhow::anyhow!("Couldn't parse statement!"))
-        }
-        Err(_) => Err(anyhow::anyhow!("Couldn't parse statement!")),
-    }
-}
-
-pub fn parse_prgm(tq: &TokenQueue<Token>) -> ParseResult<DbSchema> {
-    let mut tq = tq.clone();
-    let mut stmts = vec![];
-
-    while let Ok((stmt, end)) = parse_stmt(&tq) {
-        tq.go_to(end);
-        stmts.push(stmt);
-        if tq.consume_eq(Token::Semicolon).is_err() {
-            return Err(anyhow::anyhow!("Missing semicolon!"));
-        }
-    }
-
-    if !tq.is_consumed() {
-        dbg!(&tq);
-        return Err(anyhow::anyhow!("Program ends without a valid statement"));
-    }
-
-    Ok((DbSchema { stmts }, tq.get_idx()))
 }
