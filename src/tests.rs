@@ -9,7 +9,7 @@ use crate::{
 use rlrl::parse::TokenQueue;
 use std::{collections::HashMap, fs};
 
-const NUM_VALID_TEST_SCHEMA: usize = 2;
+const NUM_VALID_TEST_SCHEMA: usize = 3;
 
 fn lex_file(path: &str) -> anyhow::Result<TokenQueue<Token>> {
     let s = fs::read_to_string(path)?;
@@ -48,10 +48,13 @@ fn assert_maps_to_schema(expected: &str) -> anyhow::Result<()> {
     if actual.trim() != expected.trim() {
         return Err(anyhow::anyhow!(
             "Expected schema:
-'{expected}'
+
+{expected}
+
+
 Got:
-'{}'",
-            actual
+
+{actual}"
         ));
     }
     Ok(())
@@ -119,6 +122,20 @@ table T2 (b: int<, >);",
     Ok(())
 }
 
+fn different_at(s1: &str, s2: &str) -> Option<usize> {
+    s1.chars()
+        .zip(s2.chars())
+        .position(|(c1, c2)| c1 != c2)
+        .or_else(|| {
+            // if one string is longer, difference is at its length
+            if s1.len() != s2.len() {
+                Some(s1.chars().zip(s2.chars()).count())
+            } else {
+                None
+            }
+        })
+}
+
 #[test]
 fn test_ddl_3() -> anyhow::Result<()> {
     // test the program parses more complex schemas without throwing errors
@@ -130,16 +147,27 @@ fn test_ddl_3() -> anyhow::Result<()> {
         let tq = lex_file(&path_to_input)?;
         let schema = parse_spreadsheet_schema(&tq)?;
 
-        let expected = fs::read_to_string(path_to_output)?;
+        let expected = fs::read_to_string(path_to_output)?
+            .replace("\r\n", "\n")
+            .replace("\r", "");
         let actual = schema.to_string();
 
+        let expected = expected.trim();
+        let actual = actual.trim();
+
         assert!(
-            actual.trim() == expected.trim(),
-            "'{}' != '{}'",
-            actual.trim(),
-            expected.trim()
+            actual == expected,
+            "Expected:
+        
+{expected}
+
+Got:
+
+{actual}
+
+Different at: {}",
+            different_at(actual, expected).unwrap()
         );
     }
-
     Ok(())
 }

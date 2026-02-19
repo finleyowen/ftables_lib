@@ -1,1 +1,10 @@
-table Users (userId: int<0, >, userName: str<2, 32>, bio: str?);
+// FTables Valid Schema Example 1
+
+table Users (
+	// mandatory int in range [0, i32::MAX]
+	userId: int<0, >, 
+	// mandatory str with length in range [2, 32]
+	userName: str<2, 32>, 
+	// optional str with no length requirement
+	bio: str?
+);
