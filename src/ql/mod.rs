@@ -16,7 +16,7 @@ pub type SymbolTable = HashMap<Rc<str>, Symbol>;
 
 /// A statement in the query language.
 pub enum Stmt {
-    TableSchema(SharedTableSchema),
+    TableSchema(Rc<str>, SharedTableSchema),
     // Note Stmt::TypeDef stores a name for the type while Symbol::DataType
     // does not
     TypeDef(Rc<str>, SharedDataType),

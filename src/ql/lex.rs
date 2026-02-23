@@ -156,6 +156,8 @@ pub fn setup_lexer() -> Lexer<Token> {
     lexer.add_rule(r"type", |_| LexResult::Token(Token::TypeKwd));
     lexer.add_rule(r"tab", |_| LexResult::Token(Token::TableKwd));
     lexer.add_rule(r"table", |_| LexResult::Token(Token::TableKwd));
+    lexer.add_rule(r"schema", |_| LexResult::Token(Token::SchemaKwd));
+    lexer.add_rule(r"sch", |_| LexResult::Token(Token::SchemaKwd));
 
     // idents
     lexer.add_rule(r"[a-zA-Z][a-zA-Z0-9_]*", |re_match| {

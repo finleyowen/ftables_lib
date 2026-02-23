@@ -80,30 +80,29 @@ impl Display for StrDataType {
 impl Display for ColumnSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.default_value {
-            Some(val) => write!(
-                f,
-                "{}: {} = {}",
-                self.column_name, self.column_type, val
-            ),
-            None => write!(f, "{}: {}", self.column_name, self.column_type),
+            Some(val) => write!(f, "{} = {}", self.column_type, val),
+            None => write!(f, "{}", self.column_type),
         }
     }
 }
 
 impl Display for TableSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let column_strs: Vec<String> =
-            self.columns.iter().map(|col| col.to_string()).collect();
+        let column_strs: Vec<String> = self
+            .column_names
+            .iter()
+            .map(|name| format!("{name}: {}", self.columns[name]))
+            .collect();
         let columns_str = column_strs.join(", ");
 
-        write!(f, "{} ({})", self.table_name, columns_str)
+        write!(f, "({})", columns_str)
     }
 }
 
 impl Display for SpreadsheetSchema {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for table in &self.tables {
-            writeln!(f, "table {};", table)?;
+        for name in &self.table_names {
+            writeln!(f, "table {name} {};", self.tables[name])?;
         }
         Ok(())
     }
@@ -112,7 +111,9 @@ impl Display for SpreadsheetSchema {
 impl Display for Stmt {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::TableSchema(schema) => write!(f, "table {schema};",),
+            Self::TableSchema(name, schema) => {
+                write!(f, "table {name} {schema};",)
+            }
             Self::TypeDef(type_name, data_type) => {
                 write!(f, "type {type_name} {data_type};")
             }

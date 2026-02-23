@@ -153,7 +153,10 @@ fn test_ddl_3() -> anyhow::Result<()> {
         let expected = expected.trim();
         let actual = actual.trim();
 
-        assert!(actual == expected,);
+        assert!(
+            actual == expected,
+            "Expected:\n\n{expected}\n\nActual:\n\n{actual}"
+        );
     }
     Ok(())
 }

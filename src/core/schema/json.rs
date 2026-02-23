@@ -43,14 +43,12 @@ impl ToJson for ColumnSchema {
         match &self.default_value {
             Some(val) => {
                 json!({
-                    "column_name": *self.column_name,
                     "column_type": self.column_type.to_json(),
                     "default_value": val.to_json()
                 })
             }
             None => {
                 json!({
-                    "column_name": *self.column_name,
                     "column_type": self.column_type.to_json()
                 })
             }
@@ -60,17 +58,24 @@ impl ToJson for ColumnSchema {
 
 impl ToJson for TableSchema {
     fn to_json(&self) -> Value {
-        json!({"table_name": *self.table_name, "columns": Value::Array(
-            self.columns.iter().map(|column| column.to_json()).collect(),
-        )})
+        json!({
+            "columns": Value::Object(
+                self.column_names
+                    .iter()
+                    .map(|name| (name.to_string(), self.columns[name].to_json()))
+                    .collect::<serde_json::Map<String, Value>>(),
+            )
+        })
     }
 }
 
 impl ToJson for SpreadsheetSchema {
     fn to_json(&self) -> Value {
         json!({
-            "ss_name": *self.ss_name,
-            "tables": Value::Array(self.tables.iter().map(|table| table.to_json()).collect())
+            "tables": Value::Object(self.table_names
+                .iter()
+                .map(|name| (name.to_string(), self.tables[name].to_json()))
+                .collect::<serde_json::Map<String, Value>>())
         })
     }
 }

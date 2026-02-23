@@ -5,6 +5,7 @@ use anyhow::Ok;
 
 use crate::{json::ToJson, ql::lex::Literal};
 use std::{
+    collections::HashMap,
     fmt::{Debug, Display},
     rc::Rc,
 };
@@ -226,26 +227,19 @@ impl DataType for StrDataType {
 
 /// Represents a column schema in the application.
 pub struct ColumnSchema {
-    column_name: Rc<str>,
     column_type: Rc<dyn DataType>,
     default_value: Option<Literal>,
 }
 
 impl ColumnSchema {
     pub fn new(
-        column_name: Rc<str>,
         column_type: Rc<dyn DataType>,
         default_value: Option<Literal>,
     ) -> Self {
         Self {
-            column_name,
             column_type,
             default_value,
         }
-    }
-
-    pub fn get_name(&self) -> Rc<str> {
-        self.column_name.clone()
     }
 
     pub fn get_type(&self) -> Rc<dyn DataType> {
@@ -259,32 +253,32 @@ impl ColumnSchema {
 
 /// Represents a table schema in the application.
 pub struct TableSchema {
-    table_name: Rc<str>,
-    columns: Vec<ColumnSchema>,
+    columns: HashMap<Rc<str>, ColumnSchema>,
+    // keeps track of the order in which columns are defined
+    column_names: Vec<Rc<str>>,
 }
 
 impl TableSchema {
-    pub fn new(table_name: Rc<str>, columns: Vec<ColumnSchema>) -> Self {
+    pub fn new(
+        columns: HashMap<Rc<str>, ColumnSchema>,
+        column_names: Vec<Rc<str>>,
+    ) -> Self {
         Self {
-            table_name,
             columns,
+            column_names,
         }
-    }
-
-    pub fn get_name(&self) -> Rc<str> {
-        self.table_name.clone()
     }
 
     pub fn get_num_columns(&self) -> usize {
         self.columns.len()
     }
 
-    pub fn get_column(&self, idx: usize) -> Option<&ColumnSchema> {
-        self.columns.get(idx)
+    pub fn get_column(&self, column_name: &str) -> Option<&ColumnSchema> {
+        self.columns.get(column_name)
     }
 
     pub fn validate_table_schema(&self) -> anyhow::Result<()> {
-        for col in &self.columns {
+        for (_col_name, col) in &self.columns {
             col.validate_column_schema()?;
         }
         Ok(())
@@ -295,29 +289,31 @@ pub type SharedTableSchema = Rc<TableSchema>;
 
 /// Represents a database schema in the application.
 pub struct SpreadsheetSchema {
-    ss_name: Rc<str>,
-    tables: Vec<Rc<TableSchema>>,
+    tables: HashMap<Rc<str>, SharedTableSchema>,
+    table_names: Vec<Rc<str>>,
 }
 
 impl SpreadsheetSchema {
-    pub fn new(ss_name: Rc<str>, tables: Vec<Rc<TableSchema>>) -> Self {
-        Self { ss_name, tables }
-    }
-
-    pub fn get_name(&self) -> Rc<str> {
-        self.ss_name.clone()
+    pub fn new(
+        tables: HashMap<Rc<str>, SharedTableSchema>,
+        table_names: Vec<Rc<str>>,
+    ) -> Self {
+        Self {
+            tables,
+            table_names,
+        }
     }
 
     pub fn get_num_tables(&self) -> usize {
         self.tables.len()
     }
 
-    pub fn get_table(&self, idx: usize) -> Option<&Rc<TableSchema>> {
-        self.tables.get(idx)
+    pub fn get_table(&self, name: &str) -> Option<SharedTableSchema> {
+        self.tables.get(name).map(|ptr| ptr.clone())
     }
 
     pub fn validate_spreadsheet_schema(&self) -> anyhow::Result<()> {
-        for table in &self.tables {
+        for (_table_name, table) in &self.tables {
             table.validate_table_schema()?;
         }
         Ok(())

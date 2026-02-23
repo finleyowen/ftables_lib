@@ -233,7 +233,9 @@ fn parse_data_type(
     }
 }
 
-impl Parse for ColumnSchema {
+type ColumnSchemaDef = (ColumnSchema, Rc<str>);
+
+impl Parse for ColumnSchemaDef {
     fn parse(
         tq: &TokenQueue<Token>,
         symtable: &mut SymbolTable,
@@ -261,13 +263,15 @@ impl Parse for ColumnSchema {
         };
 
         Ok((
-            ColumnSchema::new(column_name, column_type, default_value),
+            (ColumnSchema::new(column_type, default_value), column_name),
             tq.get_idx(),
         ))
     }
 }
 
-impl Parse for TableSchema {
+type TableSchemaDef = (TableSchema, Rc<str>);
+
+impl Parse for TableSchemaDef {
     fn parse(
         tq: &TokenQueue<Token>,
         symtable: &mut SymbolTable,
@@ -282,11 +286,21 @@ impl Parse for TableSchema {
         tq.consume_eq(Token::OParen)
             .map_err(|_| anyhow::anyhow!("Couldn't get '('"))?;
 
-        let mut columns = vec![];
+        let mut columns = HashMap::new();
+        let mut column_names = Vec::new();
 
-        while let Ok(column) = tq.parse_with_mut(ColumnSchema::parse, symtable)
+        while let Ok((column, column_name)) =
+            tq.parse_with_mut(ColumnSchemaDef::parse, symtable)
         {
-            columns.push(column);
+            match columns.insert(column_name.clone(), column) {
+                Some(_) => {
+                    return Err(anyhow::anyhow!(
+                        "Can't have multiple columns named '{column_name}'"
+                    ));
+                }
+                None => {}
+            }
+            column_names.push(column_name);
             if tq.consume_eq(Token::Comma).is_err() {
                 break;
             }
@@ -295,7 +309,10 @@ impl Parse for TableSchema {
         tq.consume_eq(Token::CParen)
             .map_err(|_| anyhow::anyhow!("Couldn't get ')'"))?;
 
-        Ok((TableSchema::new(table_name, columns), tq.get_idx()))
+        Ok((
+            (TableSchema::new(columns, column_names), table_name),
+            tq.get_idx(),
+        ))
     }
 }
 
@@ -329,19 +346,20 @@ impl Parse for Stmt {
                 Ok((Stmt::TypeDef(type_name, data_type), tq.get_idx()))
             }
             Ok(Token::TableKwd) => {
-                let table_schema =
-                    Rc::new(tq.parse_with_mut(TableSchema::parse, symtable)?);
+                let (schema, schema_name) =
+                    tq.parse_with_mut(TableSchemaDef::parse, symtable)?;
+                let schema = Rc::new(schema);
 
                 if let Some(_) = symtable.insert(
-                    table_schema.get_name().clone(),
-                    Symbol::TableSchema(table_schema.clone()),
+                    schema_name.clone(),
+                    Symbol::TableSchema(schema.clone()),
                 ) {
                     return Err(anyhow::anyhow!(
                         "Symbol {} is already assigned!",
-                        &table_schema.get_name().clone()
+                        schema_name
                     ));
                 }
-                Ok((Stmt::TableSchema(table_schema), tq.get_idx()))
+                Ok((Stmt::TableSchema(schema_name, schema), tq.get_idx()))
             }
             Ok(_) => Err(anyhow::anyhow!("Couldn't parse statement!")),
             Err(_) => Err(anyhow::anyhow!("Couldn't parse statement!")),
@@ -355,20 +373,24 @@ impl Parse for SpreadsheetSchema {
         symtable: &mut SymbolTable,
     ) -> ParseResult<Self> {
         let mut tq: TokenQueue<Token> = tq.clone();
-        let mut tables = vec![];
+        let mut tables = HashMap::new();
+        let mut table_names = Vec::new();
         while let Ok(stmt) = tq.parse_with_mut(Stmt::parse, symtable) {
             match stmt {
-                Stmt::TableSchema(schema) => {
-                    tables.push(schema);
+                Stmt::TableSchema(schema_name, schema) => {
+                    if let Some(_) = tables.insert(schema_name.clone(), schema)
+                    {
+                        return Err(anyhow::anyhow!(
+                            "Can't have two table schemas named '{schema_name}'."
+                        ));
+                    }
+                    table_names.push(schema_name);
                 }
                 Stmt::TypeDef(_, _) => {}
             }
             tq.consume_eq(Token::Semicolon)?;
         }
-        Ok((
-            SpreadsheetSchema::new("FTables Spreadsheet".into(), tables),
-            tq.get_idx(),
-        ))
+        Ok((SpreadsheetSchema::new(tables, table_names), tq.get_idx()))
     }
 }
 
